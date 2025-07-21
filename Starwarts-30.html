@@ -1,0 +1,1641 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Starwarts - 魔法装备游戏</title>
+    <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fortawesome/fontawesome-free@6.4.0/css/all.min.css">
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Cinzel:wght@400;600;700&display=swap');
+        
+        body {
+            font-family: 'Cinzel', serif;
+            background: linear-gradient(135deg, #0c0c2e 0%, #1a1a4e 50%, #2d1b69 100%);
+            min-height: 100vh;
+            overflow-x: hidden;
+        }
+
+        .starfield {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+            z-index: -1;
+        }
+
+        .star {
+            position: absolute;
+            background: white;
+            border-radius: 50%;
+            animation: twinkle 2s infinite;
+        }
+
+        @keyframes twinkle {
+            0%, 100% { opacity: 0.3; }
+            50% { opacity: 1; }
+        }
+
+        .magic-border {
+            background: linear-gradient(45deg, #4f46e5, #7c3aed, #ec4899, #4f46e5);
+            background-size: 400% 400%;
+            animation: gradientShift 3s ease infinite;
+            border-radius: 12px;
+            padding: 2px;
+        }
+
+        @keyframes gradientShift {
+            0%, 100% { background-position: 0% 50%; }
+            50% { background-position: 100% 50%; }
+        }
+
+        .magic-card {
+            background: rgba(30, 30, 80, 0.9);
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(147, 51, 234, 0.3);
+        }
+
+        .character-avatar {
+            width: 200px;
+            height: 250px;
+            background-size: cover;
+            background-position: center;
+            border-radius: 10px;
+            transition: all 0.3s ease;
+            display: flex; 
+            align-items: center; 
+            justify-content: center;
+            margin: 0 auto;
+            border: 3px solid rgba(147, 51, 234, 0.5);
+        }
+
+        .character-avatar-default-bg {
+             background: linear-gradient(135deg, #5b21b6 0%, #1e3a8a 100%);
+        }
+
+        .inventory-slot {
+            width: 70px; 
+            height: 80px; 
+            border: 2px dashed rgba(147, 51, 234, 0.5);
+            border-radius: 8px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: all 0.3s ease;
+            position: relative; 
+        }
+
+        .inventory-slot.filled {
+            border-style: solid;
+            background: rgba(147, 51, 234, 0.2);
+            padding: 2px; 
+        }
+        
+        .text-xxs { 
+            font-size: 0.65rem; 
+            line-height: 0.85rem; 
+        }
+
+        .modal-overlay {
+            background: rgba(0, 0, 0, 0.8);
+            backdrop-filter: blur(5px);
+        }
+
+        .floating {
+            animation: floating 3s ease-in-out infinite;
+        }
+
+        @keyframes floating {
+            0%, 100% { transform: translateY(0px); }
+            50% { transform: translateY(-10px); }
+        }
+
+        .nav-button {
+            transition: all 0.3s ease;
+        }
+        .nav-button.active {
+            background-color: #ec4899;
+            box-shadow: 0 0 15px #ec4899;
+        }
+        .arena-card {
+            border: 2px solid rgba(147, 51, 234, 0.5);
+            background: rgba(20, 20, 60, 0.8);
+        }
+        
+        .confetti-container {
+            position: absolute;
+            top: 0; left: 0; width: 100%; height: 100%;
+            pointer-events: none; overflow: hidden;
+        }
+        .confetti {
+            position: absolute;
+            width: 10px;
+            height: 10px;
+            background-color: #f00;
+            opacity: 0;
+            animation: fall 3s ease-in-out forwards;
+        }
+        @keyframes fall {
+            0% { transform: translateY(-100px) rotateZ(0deg); opacity: 1; }
+            100% { transform: translateY(100vh) rotateZ(720deg); opacity: 0; }
+        }
+        /* Custom number input style */
+        input[type=number]::-webkit-inner-spin-button, 
+        input[type=number]::-webkit-outer-spin-button { 
+            -webkit-appearance: none; 
+            margin: 0; 
+        }
+        input[type=number] {
+            -moz-appearance: textfield;
+        }
+    </style>
+</head>
+<body>
+    <!-- 星空背景 -->
+    <div class="starfield" id="starfield"></div>
+
+    <!-- 登录/注册模态框 -->
+    <div id="loginRegisterModal" class="fixed inset-0 z-50 modal-overlay flex items-center justify-center">
+        <div class="magic-border">
+            <div id="loginBox" class="magic-card p-8 rounded-lg text-center w-96">
+                <h1 class="text-4xl font-bold text-purple-300 mb-4 floating">✨ Starwarts ⚡</h1>
+                <p class="text-gray-300 mb-6">登录或注册账号</p>
+                <div id="loginError" class="text-red-400 mb-2 hidden"></div>
+                <input type="text" id="usernameInput" class="w-full px-4 py-3 bg-gray-800 text-white rounded-lg border border-purple-500 focus:outline-none focus:border-purple-300 mb-4" placeholder="输入账号...">
+                <input type="password" id="loginPasswordInput" class="w-full px-4 py-3 bg-gray-800 text-white rounded-lg border border-purple-500 focus:outline-none focus:border-purple-300 mb-4" placeholder="输入密码...">
+                <div class="flex space-x-4">
+                    <button onclick="login()" class="w-full bg-gradient-to-r from-purple-600 to-pink-600 text-white py-3 rounded-lg hover:from-purple-700 hover:to-pink-700 transition-all"><i class="fas fa-sign-in-alt mr-2"></i>登录</button>
+                    <button onclick="showRegistration()" class="w-full bg-gradient-to-r from-green-500 to-blue-500 text-white py-3 rounded-lg hover:from-green-600 hover:to-blue-600 transition-all"><i class="fas fa-user-plus mr-2"></i>注册</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 主游戏界面 -->
+    <div id="mainContainer" class="hidden min-h-screen p-4">
+        <!-- 标题栏 -->
+        <div class="text-center mb-6">
+            <h1 class="text-5xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-purple-400 to-pink-400 floating">
+                ✨ Starwarts Magic Academy ⚡
+            </h1>
+            <p class="text-gray-300 mt-2">欢迎来到星辰魔法学院</p>
+        </div>
+        
+        <!-- 战力排行榜 -->
+        <div class="magic-border mb-6">
+            <div class="magic-card p-4 rounded-lg">
+                <h2 class="text-2xl font-bold text-yellow-300 text-center mb-3"><i class="fas fa-trophy mr-2"></i>战斗力排行榜</h2>
+                <div id="leaderboard" class="space-y-2 max-h-48 overflow-y-auto"></div>
+            </div>
+        </div>
+        
+        <!-- 新增：星辰财富榜 -->
+        <div class="magic-border mb-6">
+            <div class="magic-card p-4 rounded-lg">
+                <h2 class="text-2xl font-bold text-yellow-300 text-center mb-3"><i class="fas fa-gem mr-2"></i>星辰财富榜</h2>
+                <div id="wealthLeaderboard" class="space-y-2 max-h-48 overflow-y-auto"></div>
+            </div>
+        </div>
+
+        <!-- 界面切换按钮 -->
+        <div class="flex justify-center space-x-4 mb-6">
+            <button id="navInfoButton" onclick="switchView('info')" class="nav-button active bg-pink-600 text-white font-bold py-2 px-6 rounded-full"><i class="fas fa-user-circle mr-2"></i>巫师信息</button>
+            <button id="navExchangeButton" onclick="switchView('exchange')" class="nav-button bg-gray-600 text-white font-bold py-2 px-6 rounded-full"><i class="fas fa-exchange-alt mr-2"></i>交易所</button>
+            <button id="navArenaButton" onclick="switchView('arena')" class="nav-button bg-gray-600 text-white font-bold py-2 px-6 rounded-full"><i class="fas fa-khanda mr-2"></i>角斗场</button>
+        </div>
+
+        <!-- 巫师信息界面 -->
+        <div id="gameContainer">
+            <div class="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
+                <!-- 左侧商店区 -->
+                <div class="space-y-6"> 
+                    <div class="magic-border">
+                        <div class="magic-card p-6 rounded-lg">
+                            <div class="flex justify-between items-center mb-4">
+                                <h2 class="text-xl font-bold text-purple-300"><i class="fas fa-store mr-2"></i>魔法装备商店</h2>
+                                <button onclick="openAddEquipmentModal()" class="bg-green-600 hover:bg-green-700 text-white px-3 py-1 rounded text-sm"><i class="fas fa-plus mr-1"></i>添加装备</button>
+                            </div>
+                            <div id="equipmentStore" class="space-y-3 max-h-80 overflow-y-auto"></div>
+                        </div>
+                    </div>
+                    <div class="magic-border">
+                        <div class="magic-card p-6 rounded-lg">
+                            <div class="flex justify-between items-center mb-4">
+                                <h2 class="text-xl font-bold text-purple-300"><i class="fas fa-scroll mr-2"></i>魔法卡牌商店</h2>
+                                <button onclick="openAddCardModal()" class="bg-blue-600 hover:bg-blue-700 text-white px-3 py-1 rounded text-sm"><i class="fas fa-plus mr-1"></i>增加卡牌</button>
+                            </div>
+                            <div id="magicCardStoreContainer" class="space-y-3 max-h-80 overflow-y-auto"></div>
+                        </div>
+                    </div>
+                </div>
+                <!-- 中间角色区 -->
+                <div class="magic-border">
+                    <div class="magic-card p-6 rounded-lg">
+                        <h2 class="text-xl font-bold text-purple-300 mb-4 text-center"><i class="fas fa-user-astronaut mr-2"></i>我的角色</h2>
+                        <div class="text-center mb-4">
+                            <div class="character-avatar character-avatar-default-bg" id="mainCharacterAvatar"><i class="fas fa-user-secret fa-6x text-white opacity-75"></i></div>
+                            <p id="mainCharacterName" class="text-gray-100 text-2xl font-bold mt-3">自定义角色</p>
+                            <button onclick="openCustomizationModal()" class="mt-2 bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-1 rounded-full text-sm"><i class="fas fa-paint-brush mr-1"></i> 自定义角色</button>
+                        </div>
+                        <div class="bg-gray-800 p-4 rounded-lg">
+                            <h3 class="text-lg font-bold text-yellow-400 mb-3">角色属性</h3>
+                            <div class="space-y-2">
+                                <div class="flex justify-between"><span class="text-gray-300">总攻击力:</span><span class="text-red-400 font-bold" id="totalAttack">0</span></div>
+                                <div class="flex justify-between"><span class="text-gray-300">总防御力:</span><span class="text-blue-400 font-bold" id="totalDefense">0</span></div>
+                            </div>
+                        </div>
+                        <div class="mt-4">
+                            <h3 class="text-lg font-bold text-green-400 mb-3">已装备物品</h3>
+                            <div id="equippedItems" class="space-y-2 max-h-40 overflow-y-auto"><p class="text-gray-500 text-center">暂无装备</p></div>
+                        </div>
+                    </div>
+                </div>
+                <!-- 右侧金币和操作区 -->
+                <div class="magic-border">
+                    <div class="magic-card p-6 rounded-lg">
+                        <div class="text-center mb-4">
+                            <div class="text-3xl text-yellow-400 mb-2"><i class="fas fa-coins"></i></div>
+                            <div class="text-xl font-bold text-yellow-400" id="playerGold">0</div>
+                            <p class="text-gray-400">魔法金币</p>
+                        </div>
+                        <div class="space-y-3">
+                            <button onclick="promptAddGold()" class="w-full bg-yellow-600 hover:bg-yellow-700 text-white py-2 rounded"><i class="fas fa-plus mr-2"></i>通过授权获得金币</button>
+                            <button onclick="resetGame()" class="w-full bg-red-600 hover:bg-red-700 text-white py-2 rounded"><i class="fas fa-redo mr-2"></i>重置角色</button>
+                            <button onclick="saveGame()" class="w-full bg-blue-600 hover:bg-blue-700 text-white py-2 rounded"><i class="fas fa-sign-out-alt mr-2"></i>保存并退出</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <!-- 底部仓库区 -->
+            <div class="magic-border">
+                <div class="magic-card p-6 rounded-lg">
+                    <h2 class="text-xl font-bold text-purple-300 mb-4"><i class="fas fa-box mr-2"></i>魔法仓库 - 装备</h2>
+                    <div id="inventory" class="grid grid-cols-8 md:grid-cols-10 lg:grid-cols-12 xl:grid-cols-15 gap-2 mb-6"></div>
+                    <h2 class="text-xl font-bold text-purple-300 mb-4 mt-6"><i class="fas fa-layer-group mr-2"></i>魔法仓库 - 卡牌</h2>
+                    <div id="magicCardsInventoryDisplay" class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4"></div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 角斗场界面 -->
+        <div id="arenaContainer" class="hidden">
+            <div class="magic-border mb-6">
+                <div class="magic-card p-8 rounded-lg">
+                    <div class="grid grid-cols-1 md:grid-cols-3 gap-8 items-center text-center">
+                        <div class="arena-card p-6 rounded-lg">
+                            <h3 id="arenaPlayerName" class="text-2xl font-bold text-blue-300">玩家</h3>
+                            <div id="arenaPlayerAvatar" class="character-avatar my-4 character-avatar-default-bg"><i class="fas fa-user fa-6x text-white"></i></div>
+                            <div class="text-left space-y-2">
+                                <p class="text-lg"><span class="text-gray-400">战斗力:</span> <span id="arenaPlayerAttack" class="text-red-400 font-bold">0</span></p>
+                                <p class="text-lg"><span class="text-gray-400">防御力:</span> <span id="arenaPlayerDefense" class="text-blue-400 font-bold">0</span></p>
+                            </div>
+                        </div>
+                        <div class="flex flex-col items-center justify-center space-y-4">
+                            <span class="text-7xl font-black text-red-500 floating">VS</span>
+                            <!-- 新: 自定义赌注 -->
+                            <div>
+                                <label for="customBetInput" class="block text-sm font-medium text-gray-300 mb-1 text-center">自定义赌注</label>
+                                <input type="number" id="customBetInput" placeholder="默认100" class="w-36 px-3 py-2 bg-gray-900 text-white text-center rounded border border-purple-500 focus:outline-none focus:border-purple-300">
+                                <p class="text-xs text-gray-500 mt-1">需≥300, 且为100的倍数</p>
+                            </div>
+                            <button id="fightButton" onclick="startFight()" class="bg-gradient-to-r from-red-600 to-yellow-500 text-white text-2xl font-bold py-4 px-8 rounded-lg shadow-lg hover:scale-105 transition-transform">战斗吧！</button>
+                        </div>
+                        <div id="arenaOpponentCard" class="arena-card p-6 rounded-lg">
+                            <h3 id="arenaOpponentName" class="text-2xl font-bold text-red-300">???</h3>
+                            <div id="arenaOpponentAvatar" class="character-avatar my-4 character-avatar-default-bg"><i class="fas fa-question fa-6x text-white"></i></div>
+                            <div class="text-left space-y-2">
+                                <p class="text-lg"><span class="text-gray-400">战斗力:</span> <span id="arenaOpponentAttack" class="text-red-400 font-bold">?</span></p>
+                                <p class="text-lg"><span class="text-gray-400">防御力:</span> <span id="arenaOpponentDefense" class="text-blue-400 font-bold">?</span></p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <!-- 战斗记录 -->
+            <div class="magic-border">
+                <div class="magic-card p-6 rounded-lg">
+                    <h2 class="text-2xl font-bold text-indigo-300 text-center mb-4"><i class="fas fa-history mr-2"></i>战斗记录</h2>
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                        <div>
+                            <h3 class="text-lg font-bold text-yellow-300 mb-2">胜场排名</h3>
+                            <div id="winLossRanking" class="space-y-1 max-h-48 overflow-y-auto"></div>
+                        </div>
+                        <div>
+                            <h3 class="text-lg font-bold text-gray-300 mb-2">最近对战</h3>
+                            <div id="recentBattles" class="space-y-2 max-h-48 overflow-y-auto"></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 交易所界面 -->
+        <div id="exchangeContainer" class="hidden">
+            <div class="magic-border mb-6">
+                <div class="magic-card p-8 rounded-lg">
+                    <div class="flex justify-between items-center mb-6">
+                        <h2 class="text-3xl font-bold text-yellow-300 floating"><i class="fas fa-exchange-alt mr-2"></i> 魔法交易所</h2>
+                        <button onclick="openListItemModal()" class="bg-gradient-to-r from-green-500 to-blue-500 text-white font-bold py-2 px-6 rounded-lg hover:from-green-600 hover:to-blue-600 transition-all"><i class="fas fa-plus-circle mr-2"></i>上架商品</button>
+                    </div>
+                    <p class="text-gray-300 text-lg text-center mb-8">一个允许玩家之间自由交易装备与卡牌的神秘市场。</p>
+                    <div id="exchangeListings" class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6">
+                        <!-- Listings will be dynamically inserted here -->
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- 战斗结果模态框 -->
+    <div id="battleResultModal" class="fixed inset-0 z-50 modal-overlay items-center justify-center hidden">
+        <div class="magic-border">
+            <div class="magic-card p-8 rounded-lg w-auto text-center relative">
+                <div class="confetti-container" id="confettiContainer"></div>
+                <h2 id="battleResultText" class="text-6xl font-bold mb-4">胜利!</h2>
+                <div id="battleResultWinnerAvatar" class="character-avatar my-4 mx-auto"></div>
+                <p class="text-2xl text-white">获胜者是 <span id="battleResultWinnerName" class="font-bold text-yellow-300"></span>!</p>
+                <p id="battleRewardText" class="text-green-400 mt-2 text-lg"></p>
+                <button onclick="closeBattleResultModal()" class="mt-6 bg-gray-600 hover:bg-gray-700 text-white py-2 px-6 rounded">关闭</button>
+            </div>
+        </div>
+    </div>
+
+
+    <!-- 角色自定义模态框 -->
+    <div id="characterCustomizationModal" class="fixed inset-0 z-50 modal-overlay items-center justify-center hidden">
+        <div class="magic-border">
+            <div class="magic-card p-6 rounded-lg w-96">
+                <h3 class="text-xl font-bold text-purple-300 mb-4">自定义你的角色</h3>
+                <div class="space-y-4">
+                    <div>
+                        <label for="customNameInput" class="block text-sm font-medium text-gray-300 mb-1">角色名称</label>
+                        <input type="text" id="customNameInput" placeholder="输入你的角色名" class="w-full px-3 py-2 bg-gray-800 text-white rounded border border-purple-500 focus:outline-none focus:border-purple-300">
+                    </div>
+                    <div>
+                        <label for="customAvatarUrlInput" class="block text-sm font-medium text-gray-300 mb-1">头像URL</label>
+                        <input type="url" id="customAvatarUrlInput" placeholder="输入图片网络地址" class="w-full px-3 py-2 bg-gray-800 text-white rounded border border-purple-500 focus:outline-none focus:border-purple-300">
+                    </div>
+                    <div>
+                        <label for="customAvatarFileInput" class="block text-sm font-medium text-gray-300 mb-1">或上传本地图片</label>
+                        <input type="file" id="customAvatarFileInput" accept="image/*" class="w-full text-sm text-gray-400 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-purple-600 file:text-white hover:file:bg-purple-700">
+                    </div>
+                    <div class="flex space-x-3 pt-2">
+                        <button onclick="saveCustomization()" class="flex-1 bg-green-600 hover:bg-green-700 text-white py-2 rounded"><i class="fas fa-save mr-2"></i>保存</button>
+                        <button type="button" onclick="closeCustomizationModal()" class="flex-1 bg-gray-600 hover:bg-gray-700 text-white py-2 rounded">取消</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 添加装备模态框 -->
+    <div id="addEquipmentModal" class="fixed inset-0 z-50 modal-overlay items-center justify-center hidden">
+        <div class="magic-border">
+            <div class="magic-card p-6 rounded-lg w-96">
+                <h3 class="text-xl font-bold text-purple-300 mb-4">添加新装备</h3>
+                <form id="addEquipmentForm" class="space-y-4">
+                    <input type="text" id="equipmentName" placeholder="装备名称" class="w-full px-3 py-2 bg-gray-800 text-white rounded border border-purple-500 focus:outline-none focus:border-purple-300" required>
+                    <input type="url" id="equipmentImage" placeholder="装备图片URL (可选)" class="w-full px-3 py-2 bg-gray-800 text-white rounded border border-purple-500 focus:outline-none focus:border-purple-300">
+                    <input type="number" id="equipmentPrice" placeholder="价格" class="w-full px-3 py-2 bg-gray-800 text-white rounded border border-purple-500 focus:outline-none focus:border-purple-300" required>
+                    <input type="number" id="equipmentAttack" placeholder="攻击力" class="w-full px-3 py-2 bg-gray-800 text-white rounded border border-purple-500 focus:outline-none focus:border-purple-300" required>
+                    <input type="number" id="equipmentDefense" placeholder="防御力" class="w-full px-3 py-2 bg-gray-800 text-white rounded border border-purple-500 focus:outline-none focus:border-purple-300" required>
+                    <div class="flex space-x-3">
+                        <button type="submit" class="flex-1 bg-green-600 hover:bg-green-700 text-white py-2 rounded"><i class="fas fa-plus mr-2"></i>添加</button>
+                        <button type="button" onclick="closeAddEquipmentModal()" class="flex-1 bg-gray-600 hover:bg-gray-700 text-white py-2 rounded">取消</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <!-- 添加卡牌模态框 -->
+    <div id="addCardModal" class="fixed inset-0 z-50 modal-overlay items-center justify-center hidden">
+        <div class="magic-border">
+            <div class="magic-card p-6 rounded-lg w-96">
+                <h3 class="text-xl font-bold text-purple-300 mb-4">增加新卡牌</h3>
+                <form id="addCardForm" class="space-y-4">
+                    <input type="text" id="cardNameInput" placeholder="卡牌名称" class="w-full px-3 py-2 bg-gray-800 text-white rounded border border-purple-500 focus:outline-none focus:border-purple-300" required>
+                    <input type="number" id="cardPriceInput" placeholder="价格" class="w-full px-3 py-2 bg-gray-800 text-white rounded border border-purple-500 focus:outline-none focus:border-purple-300" required>
+                    <textarea id="cardDescriptionInput" placeholder="卡牌功能描述" rows="3" class="w-full px-3 py-2 bg-gray-800 text-white rounded border border-purple-500 focus:outline-none focus:border-purple-300" required></textarea>
+                    <div class="flex space-x-3">
+                        <button type="submit" class="flex-1 bg-blue-600 hover:bg-blue-700 text-white py-2 rounded"><i class="fas fa-plus mr-2"></i>增加</button>
+                        <button type="button" onclick="closeAddCardModal()" class="flex-1 bg-gray-600 hover:bg-gray-700 text-white py-2 rounded">取消</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <!-- 上架商品模态框 -->
+    <div id="listItemModal" class="fixed inset-0 z-50 modal-overlay items-center justify-center hidden">
+        <div class="magic-border">
+            <div class="magic-card p-6 rounded-lg w-96">
+                <h3 class="text-xl font-bold text-purple-300 mb-4">上架新商品</h3>
+                <form id="listItemForm" class="space-y-4">
+                    <input type="text" id="itemNameInput" placeholder="商品名称" class="w-full px-3 py-2 bg-gray-800 text-white rounded border border-purple-500 focus:outline-none focus:border-purple-300" required>
+                    <input type="number" id="itemPriceInput" placeholder="售价" class="w-full px-3 py-2 bg-gray-800 text-white rounded border border-purple-500 focus:outline-none focus:border-purple-300" required>
+                    <input type="url" id="itemImageUrlInput" placeholder="商品图片URL" class="w-full px-3 py-2 bg-gray-800 text-white rounded border border-purple-500 focus:outline-none focus:border-purple-300">
+                    <div>
+                        <label for="itemImageFileInput" class="block text-sm font-medium text-gray-300 mb-1">或上传本地图片</label>
+                        <input type="file" id="itemImageFileInput" accept="image/*" class="w-full text-sm text-gray-400 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-purple-600 file:text-white hover:file:bg-purple-700">
+                    </div>
+                    <div class="flex space-x-3">
+                        <button type="submit" class="flex-1 bg-green-600 hover:bg-green-700 text-white py-2 rounded"><i class="fas fa-arrow-up mr-2"></i>上架</button>
+                        <button type="button" onclick="closeListItemModal()" class="flex-1 bg-gray-600 hover:bg-gray-700 text-white py-2 rounded">取消</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+
+    <script>
+        // --- 全局变量 ---
+        const ACCOUNTS_STORAGE_KEY = 'starwartsUserAccounts';
+        const GLOBAL_STORE_KEY = 'starwartsGlobalStore';
+        const BATTLE_HISTORY_KEY = 'starwartsBattleHistory';
+        const EXCHANGE_LISTINGS_KEY = 'starwartsExchangeListings';
+        let currentUser = null;
+        let gameState = {};
+        let globalEquipmentStore = [];
+        let globalMagicCardStore = [];
+        let globalExchangeListings = [];
+        let rollInterval = null;
+
+        // --- 游戏启动与账户管理 ---
+
+        document.addEventListener('DOMContentLoaded', function() {
+            createStarfield();
+            document.getElementById('loginRegisterModal').classList.remove('hidden');
+            document.getElementById('loginPasswordInput').addEventListener('keypress', function(e) { if (e.key === 'Enter') login(); });
+            document.getElementById('listItemForm').addEventListener('submit', handleListItemSubmit);
+        });
+
+        function getAccounts() {
+            const accounts = localStorage.getItem(ACCOUNTS_STORAGE_KEY);
+            return accounts ? JSON.parse(accounts) : {};
+        }
+
+        function saveAccounts(accounts) {
+            localStorage.setItem(ACCOUNTS_STORAGE_KEY, JSON.stringify(accounts));
+        }
+
+        function getGlobalStore() {
+            const store = localStorage.getItem(GLOBAL_STORE_KEY);
+            return store ? JSON.parse(store) : { equipmentStore: [], magicCardStore: [] };
+        }
+
+        function saveGlobalStore() {
+            const storeData = {
+                equipmentStore: globalEquipmentStore,
+                magicCardStore: globalMagicCardStore
+            };
+            localStorage.setItem(GLOBAL_STORE_KEY, JSON.stringify(storeData));
+        }
+        
+        function getExchangeListings() {
+            const listings = localStorage.getItem(EXCHANGE_LISTINGS_KEY);
+            return listings ? JSON.parse(listings) : [];
+        }
+
+        function saveExchangeListings() {
+            localStorage.setItem(EXCHANGE_LISTINGS_KEY, JSON.stringify(globalExchangeListings));
+        }
+        
+        function login() {
+            const username = document.getElementById('usernameInput').value.trim();
+            const password = document.getElementById('loginPasswordInput').value;
+            const errorDiv = document.getElementById('loginError');
+            
+            if (!username || !password) {
+                errorDiv.textContent = '账号和密码不能为空！';
+                errorDiv.classList.remove('hidden');
+                return;
+            }
+
+            const accounts = getAccounts();
+            if (accounts[username] && accounts[username].password === password) {
+                currentUser = username;
+                document.getElementById('loginRegisterModal').classList.add('hidden');
+                document.getElementById('mainContainer').classList.remove('hidden');
+                initializeGame();
+            } else {
+                errorDiv.textContent = '账号或密码错误！';
+                errorDiv.classList.remove('hidden');
+            }
+        }
+        
+        function showRegistration() {
+            registerAccount();
+        }
+
+        function registerAccount() {
+            const newUsername = prompt("请输入您要注册的新账号名称:");
+            if (!newUsername || newUsername.trim() === "") {
+                alert("账号名称不能为空。");
+                return;
+            }
+
+            const accounts = getAccounts();
+            if (accounts[newUsername.trim()]) {
+                alert("该账号名称已被占用，请换一个。");
+                return;
+            }
+
+            const newPassword = prompt(`为账号 "${newUsername}" 设置一个新密码:`);
+            if (!newPassword) {
+                 alert("密码不能为空。");
+                 return;
+            }
+
+            accounts[newUsername.trim()] = {
+                password: newPassword,
+                gameState: getFreshDefaultState()
+            };
+            saveAccounts(accounts);
+            alert(`账号 "${newUsername}" 注册成功！请使用新账号密码登录。`);
+            document.getElementById('usernameInput').value = newUsername.trim();
+            document.getElementById('loginPasswordInput').value = '';
+        }
+
+        // --- 核心游戏逻辑 ---
+        
+        function initializeGame() {
+            const globalStore = getGlobalStore();
+            globalEquipmentStore = globalStore.equipmentStore;
+            globalMagicCardStore = globalStore.magicCardStore;
+            globalExchangeListings = getExchangeListings();
+            
+            loadGame();
+            renderEquipmentStore();
+            renderMagicCardStore(); 
+            renderInventory();
+            renderMagicCardsInventory(); 
+            updateCharacterDisplay();
+            updateUI();
+            renderLeaderboard();
+            renderWealthLeaderboard(); // 新增：渲染财富榜
+            switchView('info');
+        }
+        
+        function createStarfield() {
+            const starfield = document.getElementById('starfield');
+            if (!starfield) return;
+            starfield.innerHTML = ''; 
+            for (let i = 0; i < 100; i++) {
+                const star = document.createElement('div');
+                star.className = 'star';
+                star.style.left = Math.random() * 100 + '%';
+                star.style.top = Math.random() * 100 + '%';
+                star.style.width = Math.random() * 3 + 1 + 'px';
+                star.style.height = star.style.width;
+                star.style.animationDelay = Math.random() * 2 + 's';
+                starfield.appendChild(star);
+            }
+        }
+
+        function switchView(viewName) {
+            // Get all view containers
+            const gameContainer = document.getElementById('gameContainer');
+            const arenaContainer = document.getElementById('arenaContainer');
+            const exchangeContainer = document.getElementById('exchangeContainer');
+
+            // Get all nav buttons
+            const navInfoButton = document.getElementById('navInfoButton');
+            const navArenaButton = document.getElementById('navArenaButton');
+            const navExchangeButton = document.getElementById('navExchangeButton');
+
+            // Hide all containers first
+            gameContainer.classList.add('hidden');
+            arenaContainer.classList.add('hidden');
+            exchangeContainer.classList.add('hidden');
+
+            // Deactivate all buttons
+            navInfoButton.classList.remove('active', 'bg-pink-600');
+            navInfoButton.classList.add('bg-gray-600');
+            navArenaButton.classList.remove('active', 'bg-pink-600');
+            navArenaButton.classList.add('bg-gray-600');
+            navExchangeButton.classList.remove('active', 'bg-pink-600');
+            navExchangeButton.classList.add('bg-gray-600');
+
+            if (viewName === 'info') {
+                gameContainer.classList.remove('hidden');
+                navInfoButton.classList.add('active', 'bg-pink-600');
+                navInfoButton.classList.remove('bg-gray-600');
+            } else if (viewName === 'arena') {
+                const password = prompt("请输入密码以进入角斗场:");
+                if (password === '1234') {
+                    arenaContainer.classList.remove('hidden');
+                    navArenaButton.classList.add('active', 'bg-pink-600');
+                    navArenaButton.classList.remove('bg-gray-600');
+                    renderArena();
+                } else if (password !== null) {
+                    alert("密码错误！");
+                    // Revert to info view if password fails
+                    switchView('info');
+                }
+            } else if (viewName === 'exchange') {
+                // No password needed to enter
+                exchangeContainer.classList.remove('hidden');
+                navExchangeButton.classList.add('active', 'bg-pink-600');
+                navExchangeButton.classList.remove('bg-gray-600');
+                renderExchange();
+            }
+        }
+        
+        function renderLeaderboard() {
+            const accounts = getAccounts();
+            let leaderboardData = [];
+
+            for (const username in accounts) {
+                const userGameState = accounts[username].gameState;
+                const characterName = userGameState.characterName || username;
+                
+                const totalAttack = userGameState.equippedItems.reduce((sum, item) => sum + item.attack, 0);
+                leaderboardData.push({ 
+                    name: characterName, 
+                    attack: totalAttack, 
+                    username: username 
+                });
+            }
+            
+            leaderboardData.sort((a, b) => b.attack - a.attack);
+            
+            const leaderboardContainer = document.getElementById('leaderboard');
+            leaderboardContainer.innerHTML = '';
+
+            if(leaderboardData.length === 0) {
+                 leaderboardContainer.innerHTML = '<p class="text-gray-400 text-center">暂无玩家排行</p>';
+                 return;
+            }
+            
+            const rankColors = ['text-yellow-300', 'text-gray-300', 'text-yellow-600'];
+            const rankIcons = ['fa-crown', 'fa-medal', 'fa-award'];
+
+            leaderboardData.slice(0, 5).forEach((player, index) => {
+                const color = rankColors[index] || 'text-gray-400';
+                const icon = rankIcons[index] ? `<i class="fas ${rankIcons[index]} ${color} mr-2"></i>` : `<span class="inline-block w-6 text-center mr-2">${index + 1}.</span>`;
+                const playerDiv = document.createElement('div');
+                playerDiv.className = `flex items-center justify-between p-2 rounded-md ${index < 3 ? 'bg-purple-900 bg-opacity-30' : ''}`;
+                playerDiv.innerHTML = `
+                    <div class="flex items-center">
+                        ${icon}
+                        <span class="font-bold text-lg ${color}">${player.name}</span>
+                    </div>
+                    <div class="flex items-center text-sm ${color}">
+                        <span class="text-red-400 mr-4" title="攻击力"><i class="fas fa-gavel"></i> ${player.attack}</span> 
+                        <button onclick="deleteUser('${player.username}')" class="text-red-500 hover:text-red-400" title="删除角色"><i class="fas fa-trash"></i></button>
+                    </div>`;
+                leaderboardContainer.appendChild(playerDiv);
+            });
+        }
+        
+        // 新增：渲染财富榜函数
+        function renderWealthLeaderboard() {
+            const accounts = getAccounts();
+            let wealthData = [];
+
+            for (const username in accounts) {
+                const userGameState = accounts[username].gameState;
+                const characterName = userGameState.characterName || username;
+                
+                const totalGold = userGameState.playerGold || 0;
+                wealthData.push({ 
+                    name: characterName, 
+                    gold: totalGold
+                });
+            }
+            
+            wealthData.sort((a, b) => b.gold - a.gold);
+            
+            const wealthContainer = document.getElementById('wealthLeaderboard');
+            wealthContainer.innerHTML = '';
+
+            if(wealthData.length === 0) {
+                 wealthContainer.innerHTML = '<p class="text-gray-400 text-center">暂无玩家财富数据</p>';
+                 return;
+            }
+            
+            const rankColors = ['text-yellow-300', 'text-gray-300', 'text-yellow-600'];
+            const rankIcons = ['fa-crown', 'fa-medal', 'fa-award'];
+
+            wealthData.slice(0, 5).forEach((player, index) => {
+                const color = rankColors[index] || 'text-gray-400';
+                const icon = rankIcons[index] ? `<i class="fas ${rankIcons[index]} ${color} mr-2"></i>` : `<span class="inline-block w-6 text-center mr-2">${index + 1}.</span>`;
+                const playerDiv = document.createElement('div');
+                playerDiv.className = `flex items-center justify-between p-2 rounded-md ${index < 3 ? 'bg-purple-900 bg-opacity-30' : ''}`;
+                playerDiv.innerHTML = `
+                    <div class="flex items-center">
+                        ${icon}
+                        <span class="font-bold text-lg ${color}">${player.name}</span>
+                    </div>
+                    <div class="flex items-center text-sm ${color}">
+                        <span class="text-yellow-400 mr-4" title="魔法金币"><i class="fas fa-coins"></i> ${player.gold}</span> 
+                    </div>`;
+                wealthContainer.appendChild(playerDiv);
+            });
+        }
+
+        function deleteUser(usernameToDelete) {
+            const password = prompt(`请输入管理员密码以删除用户 "${usernameToDelete}":`);
+            if (password === '900504') {
+                if (confirm(`【警告】即将永久删除用户 "${usernameToDelete}" 的所有数据！此操作无法撤销，确定吗？`)) {
+                    const accounts = getAccounts();
+                    if (accounts[usernameToDelete]) {
+                        delete accounts[usernameToDelete];
+                        saveAccounts(accounts);
+                        alert(`用户 "${usernameToDelete}" 已被成功删除。`);
+                        if (currentUser === usernameToDelete) { saveGame(); } 
+                        else { renderLeaderboard(); renderWealthLeaderboard(); }
+                    } else {
+                        alert("未找到该用户。");
+                    }
+                }
+            } else if (password !== null) {
+                alert("密码错误，操作取消。");
+            }
+        }
+
+
+        function renderEquipmentStore() {
+            const container = document.getElementById('equipmentStore');
+            container.innerHTML = '';
+            if (globalEquipmentStore.length === 0) {
+                container.innerHTML = '<p class="text-gray-400 text-center">商店暂无魔法装备。</p>';
+            } else {
+                globalEquipmentStore.forEach(equipment => {
+                    const equipmentDiv = document.createElement('div');
+                    equipmentDiv.className = 'equipment-item magic-card p-3 rounded-lg';
+                    equipmentDiv.innerHTML = `
+                        <div class="flex items-center space-x-3">
+                            <div class="w-12 h-12 bg-gradient-to-br from-purple-500 to-pink-500 rounded-lg flex items-center justify-center">
+                                ${equipment.image ? `<img src="${equipment.image}" alt="${equipment.name}" class="w-10 h-10 object-cover rounded">` : '<i class="fas fa-hat-wizard text-white"></i>'}
+                            </div>
+                            <div class="flex-1">
+                                <h4 class="text-white font-bold">${equipment.name}</h4>
+                                <div class="text-xs text-gray-400">
+                                    <span class="text-red-400">攻击: ${equipment.attack}</span> | 
+                                    <span class="text-blue-400">防御: ${equipment.defense}</span>
+                                </div>
+                            </div>
+                            <div class="text-right">
+                                <div class="text-yellow-400 font-bold">${equipment.price} <i class="fas fa-coins"></i></div>
+                                <div class="space-x-1 mt-1">
+                                    <button onclick="buyEquipment(${equipment.id})" class="bg-green-600 hover:bg-green-700 text-white px-2 py-1 rounded text-xs" title="购买"><i class="fas fa-shopping-cart"></i></button>
+                                    <button onclick="deleteEquipmentFromStore(${equipment.id})" class="bg-red-600 hover:bg-red-700 text-white px-2 py-1 rounded text-xs" title="删除"><i class="fas fa-trash"></i></button>
+                                </div>
+                            </div>
+                        </div>`;
+                    container.appendChild(equipmentDiv);
+                });
+            }
+        }
+
+        function renderMagicCardStore() {
+            const container = document.getElementById('magicCardStoreContainer');
+            container.innerHTML = '';
+            if (globalMagicCardStore.length === 0) {
+                container.innerHTML = '<p class="text-gray-400 text-center">商店暂无魔法卡牌。</p>';
+            } else {
+                globalMagicCardStore.forEach(card => {
+                    const cardDiv = document.createElement('div');
+                    cardDiv.className = 'magic-card-item magic-card p-3 rounded-lg';
+                    cardDiv.innerHTML = `
+                        <div class="flex flex-col space-y-2">
+                            <div class="flex justify-between items-start">
+                                <h4 class="text-white font-bold text-lg">${card.name}</h4>
+                                <div class="text-yellow-400 font-bold">${card.price} <i class="fas fa-coins"></i></div>
+                            </div>
+                            <p class="text-gray-300 text-sm leading-snug">${card.description}</p>
+                            <div class="flex justify-end space-x-2 mt-2">
+                                <button onclick="buyMagicCard(${card.id})" class="bg-green-600 hover:bg-green-700 text-white px-3 py-1 rounded text-xs" title="购买卡牌"><i class="fas fa-shopping-cart mr-1"></i>购买</button>
+                                <button onclick="deleteCardFromStore(${card.id})" class="bg-red-600 hover:bg-red-700 text-white px-3 py-1 rounded text-xs" title="从商店删除卡牌"><i class="fas fa-trash mr-1"></i>删除</button>
+                            </div>
+                        </div>`;
+                    container.appendChild(cardDiv);
+                });
+            }
+        }
+
+        function openAddCardModal() {
+            const password = prompt("请输入授权密码以增加卡牌:");
+            if (password === "1234") {
+                document.getElementById('addCardModal').classList.remove('hidden');
+                document.getElementById('addCardModal').classList.add('flex');
+            } else if (password !== null) {
+                alert("授权密码错误！无法增加卡牌。");
+            }
+        }
+
+        function closeAddCardModal() {
+            document.getElementById('addCardModal').classList.add('hidden');
+            document.getElementById('addCardModal').classList.remove('flex');
+            document.getElementById('addCardForm').reset();
+        }
+
+        document.getElementById('addCardForm').addEventListener('submit', function(e) {
+            e.preventDefault();
+            const newCard = { id: Date.now(), name: document.getElementById('cardNameInput').value, price: parseInt(document.getElementById('cardPriceInput').value), description: document.getElementById('cardDescriptionInput').value };
+            if (isNaN(newCard.price) || newCard.price < 0) { alert("请输入有效的卡牌价格！"); return; }
+            globalMagicCardStore.push(newCard);
+            renderMagicCardStore();
+            closeAddCardModal();
+            saveGlobalStore();
+        });
+
+        function buyMagicCard(cardId) {
+            const card = globalMagicCardStore.find(c => c.id === cardId);
+            if (!card) return;
+            if (confirm(`确定要花费 ${card.price} 金币购买卡牌 "${card.name}" 吗？`)) {
+                if (gameState.playerGold < card.price) { alert('金币不足！'); return; }
+                gameState.playerGold -= card.price;
+                gameState.magicCardsInventory.push({...card}); 
+                updateUI();
+                renderMagicCardsInventory();
+                saveGameAndStay(); 
+            }
+        }
+
+        function deleteCardFromStore(cardId) {
+            const password = prompt("请输入授权密码以删除商店卡牌:");
+            if (password === "1234") {
+                if (confirm('确定要从商店永久删除这张卡牌吗？此操作不可逆！')) {
+                    globalMagicCardStore = globalMagicCardStore.filter(c => c.id !== cardId);
+                    renderMagicCardStore();
+                    saveGlobalStore();
+                }
+            } else if (password !== null) {
+                alert("授权密码错误！操作取消。");
+            }
+        }
+
+        function renderInventory() {
+            const container = document.getElementById('inventory');
+            container.innerHTML = '';
+            const inventorySize = 30;
+
+            // Render items from inventory first
+            gameState.inventory.forEach((item, i) => {
+                const slot = document.createElement('div');
+                slot.className = 'inventory-slot filled';
+
+                const isEquipment = item.hasOwnProperty('attack') && item.hasOwnProperty('defense');
+                const basePrice = item.price || 0;
+                const sellPrice = Math.floor(basePrice * 0.8);
+                const displayName = item.name.length > 8 ? item.name.substring(0, 7) + '...' : item.name;
+                
+                const statsDisplay = isEquipment 
+                    ? `(攻:${item.attack} 防:${item.defense})` 
+                    : `(买入价:${basePrice})`;
+
+                const actionButtons = `
+                    <div class="flex space-x-1 mb-0.5">
+                        ${isEquipment ? `<button class="bg-green-500 hover:bg-green-600 text-white px-1.5 py-0.5 rounded text-xxs leading-none" onclick="equipItemFromInventory(${i})" title="穿戴"><i class="fas fa-hand-sparkles"></i></button>` : `<div class="w-4 h-4"></div>`}
+                        <button class="bg-yellow-500 hover:bg-yellow-600 text-white px-1.5 py-0.5 rounded text-xxs leading-none" onclick="sellItemFromInventory(${i})" title="出售 (${sellPrice}金币)"><i class="fas fa-dollar-sign"></i></button>
+                    </div>
+                `;
+
+                slot.innerHTML = `
+                    <div class="w-full h-full bg-gradient-to-br from-purple-600 to-pink-600 rounded flex flex-col items-center justify-between p-1 text-center">
+                        ${item.image ? `<img src="${item.image}" alt="${item.name}" class="w-6 h-6 object-cover rounded mt-0.5">` : '<i class="fas fa-scroll text-white text-lg mt-0.5"></i>'}
+                        <p class="text-white text-xxs leading-tight my-0.5" title="${item.name} ${statsDisplay}">${displayName}</p>
+                        ${actionButtons}
+                    </div>`;
+                container.appendChild(slot);
+            });
+
+            // Fill the rest with empty slots
+            const emptySlotsCount = inventorySize - gameState.inventory.length;
+            for (let i = 0; i < emptySlotsCount; i++) {
+                const slot = document.createElement('div');
+                slot.className = 'inventory-slot';
+                slot.innerHTML = '<i class="fas fa-plus text-purple-500 opacity-50"></i>';
+                container.appendChild(slot);
+            }
+        }
+        
+        function renderMagicCardsInventory() {
+            const container = document.getElementById('magicCardsInventoryDisplay');
+            container.innerHTML = '';
+            if (gameState.magicCardsInventory.length === 0) {
+                container.innerHTML = '<p class="text-gray-400 text-center col-span-full">你的魔法卡牌收藏还是空的。</p>';
+            } else {
+                gameState.magicCardsInventory.forEach((card, index) => {
+                    const sellPrice = Math.floor(card.price * 0.8);
+                    const cardDiv = document.createElement('div');
+                    cardDiv.className = 'magic-card p-4 rounded-lg flex flex-col justify-between'; 
+                    cardDiv.innerHTML = `
+                        <div>
+                            <h4 class="text-white font-bold text-md mb-1">${card.name}</h4>
+                            <p class="text-gray-300 text-xs mb-3 leading-snug">${card.description}</p>
+                        </div>
+                        <div class="flex justify-end space-x-2 mt-auto">
+                            <button onclick="useMagicCard(${index})" class="bg-indigo-600 hover:bg-indigo-700 text-white px-2 py-1 rounded text-xs" title="使用卡牌"><i class="fas fa-magic mr-1"></i>使用</button>
+                            <button onclick="sellMagicCardFromInventory(${index})" class="bg-yellow-500 hover:bg-yellow-600 text-white px-2 py-1 rounded text-xs" title="出售卡牌 (${sellPrice}金币)"><i class="fas fa-dollar-sign mr-1"></i>出售</button>
+                        </div>`;
+                    container.appendChild(cardDiv);
+                });
+            }
+        }
+
+        function useMagicCard(inventoryIndex) {
+            const card = gameState.magicCardsInventory[inventoryIndex];
+            if (!card) return;
+            if (confirm(`确定要使用卡牌 "${card.name}" 吗？使用后卡牌将消失。`)) {
+                alert(`使用了卡牌：${card.name}！\n效果：${card.description}`);
+                gameState.magicCardsInventory.splice(inventoryIndex, 1);
+                renderMagicCardsInventory();
+                saveGameAndStay(); 
+            }
+        }
+
+        function sellMagicCardFromInventory(inventoryIndex) {
+            const card = gameState.magicCardsInventory[inventoryIndex];
+            if (!card) return;
+            const sellPrice = Math.floor(card.price * 0.8);
+            if (confirm(`确定要以 ${sellPrice} 金币的价格出售卡牌 "${card.name}" 吗？`)) {
+                gameState.playerGold += sellPrice;
+                gameState.magicCardsInventory.splice(inventoryIndex, 1); 
+                updateUI();
+                renderMagicCardsInventory();
+                saveGameAndStay();
+            }
+        }
+        
+        function equipItemFromInventory(inventoryIndex) {
+            const item = gameState.inventory[inventoryIndex];
+            if (item) {
+                if (confirm(`是否装备 ${item.name}？`)) {
+                    gameState.equippedItems.push({...item});
+                    gameState.inventory.splice(inventoryIndex, 1); 
+                    updateUI();
+                    renderInventory(); 
+                    saveGameAndStay();
+                }
+            }
+        }
+
+        function sellItemFromInventory(inventoryIndex) {
+            const item = gameState.inventory[inventoryIndex];
+            if (!item) return;
+            const basePrice = item.price || 0;
+            const sellPrice = Math.floor(basePrice * 0.8);
+            if (confirm(`确定要以 ${sellPrice} 金币的价格出售 ${item.name} 吗？`)) {
+                gameState.playerGold += sellPrice;
+                gameState.inventory.splice(inventoryIndex, 1); 
+                updateUI();
+                renderInventory();
+                saveGameAndStay();
+            }
+        }
+
+        function unequipItem(equippedItemIndex) {
+            if (gameState.inventory.length >= 30) {
+                 alert('装备仓库已满，无法卸下装备！');
+                 return;
+            }
+            const item = gameState.equippedItems[equippedItemIndex];
+            gameState.inventory.push({...item}); 
+            gameState.equippedItems.splice(equippedItemIndex, 1);
+            updateUI();
+            renderInventory();
+            saveGameAndStay();
+        }
+        
+        function buyEquipment(equipmentId) {
+            const equipment = globalEquipmentStore.find(e => e.id === equipmentId);
+            if (!equipment) return;
+            if (confirm(`确定要花费 ${equipment.price} 金币购买 "${equipment.name}" 吗？`)) {
+                if (gameState.playerGold < equipment.price) { alert('金币不足！'); return; }
+                if (gameState.inventory.length >= 30) { alert('装备仓库已满！'); return; }
+                gameState.playerGold -= equipment.price;
+                gameState.inventory.push({...equipment}); 
+                updateUI();
+                renderInventory();
+                saveGameAndStay();
+            }
+        }
+
+        function deleteEquipmentFromStore(equipmentId) {
+            const password = prompt("请输入授权密码以删除商店装备:");
+            if (password === "1234") {
+                if (confirm('确定要从商店删除这个装备吗？此操作不可逆！')) {
+                    globalEquipmentStore = globalEquipmentStore.filter(e => e.id !== equipmentId);
+                    renderEquipmentStore();
+                    saveGlobalStore();
+                }
+            } else if (password !== null) {
+                alert("授权密码错误！操作取消。");
+            }
+        }
+        
+        function openCustomizationModal() {
+            document.getElementById('customNameInput').value = gameState.characterName;
+            document.getElementById('customAvatarUrlInput').value = '';
+            document.getElementById('customAvatarFileInput').value = ''; 
+            const modal = document.getElementById('characterCustomizationModal');
+            modal.classList.remove('hidden');
+            modal.classList.add('flex');
+        }
+
+        function closeCustomizationModal() {
+            const modal = document.getElementById('characterCustomizationModal');
+            modal.classList.add('hidden');
+            modal.classList.remove('flex');
+        }
+
+        function saveCustomization() {
+            const newName = document.getElementById('customNameInput').value.trim();
+            const newUrl = document.getElementById('customAvatarUrlInput').value.trim();
+            const file = document.getElementById('customAvatarFileInput').files[0];
+
+            if (newName) { gameState.characterName = newName; }
+            if (file) {
+                const reader = new FileReader();
+                reader.onload = function(e) { gameState.characterAvatar = e.target.result; finishSaveCustomization(); };
+                reader.readAsDataURL(file);
+            } else if (newUrl) {
+                gameState.characterAvatar = newUrl;
+                finishSaveCustomization();
+            } else {
+                finishSaveCustomization();
+            }
+        }
+        
+        function finishSaveCustomization() {
+            updateCharacterDisplay();
+            updateUI();
+            saveGameAndStay();
+            closeCustomizationModal();
+        }
+
+        function updateCharacterDisplay() {
+            const avatarDiv = document.getElementById('mainCharacterAvatar');
+            const nameP = document.getElementById('mainCharacterName');
+            nameP.textContent = gameState.characterName || '未命名角色';
+            if (gameState.characterAvatar) {
+                avatarDiv.innerHTML = '';
+                avatarDiv.style.backgroundImage = `url('${gameState.characterAvatar}')`;
+                avatarDiv.classList.remove('character-avatar-default-bg');
+            } else {
+                avatarDiv.style.backgroundImage = '';
+                avatarDiv.innerHTML = '<i class="fas fa-user-astronaut fa-6x text-white opacity-75"></i>';
+                avatarDiv.classList.add('character-avatar-default-bg');
+            }
+        }
+
+        function updateUI() {
+            document.getElementById('playerGold').textContent = gameState.playerGold;
+            const totalAttack = gameState.equippedItems.reduce((sum, item) => sum + item.attack, 0);
+            const totalDefense = gameState.equippedItems.reduce((sum, item) => sum + item.defense, 0);
+            document.getElementById('totalAttack').textContent = totalAttack;
+            document.getElementById('totalDefense').textContent = totalDefense;
+            const equippedContainer = document.getElementById('equippedItems');
+            if (gameState.equippedItems.length === 0) {
+                equippedContainer.innerHTML = '<p class="text-gray-500 text-center">暂无装备</p>';
+            } else {
+                equippedContainer.innerHTML = gameState.equippedItems.map((item, index) => `
+                    <div class="flex items-center justify-between bg-gray-800 p-2 rounded">
+                        <div class="flex items-center space-x-2">
+                            <div class="w-8 h-8 bg-gradient-to-br from-purple-500 to-pink-500 rounded flex items-center justify-center">
+                                ${item.image ? `<img src="${item.image}" alt="${item.name}" class="w-6 h-6 object-cover rounded">` : '<i class="fas fa-shield-alt text-white text-xs"></i>'}
+                            </div>
+                            <span class="text-white text-sm">${item.name} (攻:${item.attack} 防:${item.defense})</span>
+                        </div>
+                        <button onclick="unequipItem(${index})" class="bg-red-600 hover:bg-red-700 text-white px-2 py-1 rounded text-xs" title="卸下"><i class="fas fa-times"></i></button>
+                    </div>`).join('');
+            }
+        }
+
+        function openAddEquipmentModal() {
+            const password = prompt("请输入授权密码以添加装备:");
+            if (password === "1234") {
+                document.getElementById('addEquipmentModal').classList.remove('hidden');
+                document.getElementById('addEquipmentModal').classList.add('flex');
+            } else if (password !== null) { 
+                alert("授权密码错误！无法添加装备。");
+            }
+        }
+
+        function closeAddEquipmentModal() {
+            document.getElementById('addEquipmentModal').classList.add('hidden');
+            document.getElementById('addEquipmentModal').classList.remove('flex');
+            document.getElementById('addEquipmentForm').reset();
+        }
+
+        document.getElementById('addEquipmentForm').addEventListener('submit', function(e) {
+            e.preventDefault();
+            const newEquipment = { id: Date.now(), name: document.getElementById('equipmentName').value, image: document.getElementById('equipmentImage').value || '', price: parseInt(document.getElementById('equipmentPrice').value), attack: parseInt(document.getElementById('equipmentAttack').value), defense: parseInt(document.getElementById('equipmentDefense').value) };
+            if (isNaN(newEquipment.price) || newEquipment.price < 0 || isNaN(newEquipment.attack) || isNaN(newEquipment.defense) ) { alert("请输入有效的装备属性和价格！"); return; }
+            globalEquipmentStore.push(newEquipment);
+            renderEquipmentStore();
+            closeAddEquipmentModal();
+            saveGlobalStore();
+        });
+
+        function promptAddGold() {
+            const password = prompt("请输入金币授权密码:");
+            if (password === "1234") { 
+                const amountStr = prompt("请输入要增加的金币数量:");
+                if (amountStr !== null) {
+                    const amount = parseInt(amountStr);
+                    if (!isNaN(amount) && amount > 0) {
+                        gameState.playerGold += amount;
+                        updateUI();
+                        saveGameAndStay();
+                        alert(`成功增加 ${amount} 金币！`);
+                    } else {
+                        alert("请输入有效的正整数金币数量！");
+                    }
+                }
+            } else if (password !== null) { 
+                alert("授权密码错误！");
+            }
+        }
+
+        function resetGame() {
+            if (confirm('确定要重置角色的名称、装备、仓库和金币吗？\n\n头像和商店物品将保留。此操作不可逆！')) {
+                gameState.characterName = "新玩家";
+                gameState.playerGold = 0;
+                gameState.equippedItems = [];
+                gameState.inventory = []; 
+                gameState.magicCardsInventory = [];
+                saveGameAndStay();
+                initializeGame();
+            }
+        }
+        
+        function saveGameAndStay() {
+            const accounts = getAccounts();
+            if (accounts[currentUser]) {
+                accounts[currentUser].gameState = gameState;
+                saveAccounts(accounts);
+                renderLeaderboard();
+                renderWealthLeaderboard(); // 新增：更新财富榜
+                console.log("Game auto-saved for:", currentUser);
+            }
+        }
+
+        function saveGame() {
+            saveGameAndStay(); 
+            alert("游戏已保存！即将退出登录。");
+
+            currentUser = null;
+            gameState = {};
+            document.getElementById('mainContainer').classList.add('hidden');
+            document.getElementById('loginRegisterModal').classList.remove('hidden');
+            document.getElementById('usernameInput').value = '';
+            document.getElementById('loginPasswordInput').value = '';
+            document.getElementById('loginError').classList.add('hidden');
+            document.getElementById('usernameInput').focus();
+        }
+        
+        function getFreshDefaultState() {
+            return { playerGold: 0, characterName: "新玩家", characterAvatar: null, equippedItems: [], inventory: [], magicCardsInventory: [] };
+        }
+
+        function loadGame() {
+            const accounts = getAccounts();
+            if (accounts[currentUser]) {
+                const defaultState = getFreshDefaultState();
+                const savedState = accounts[currentUser].gameState;
+                gameState = { ...defaultState, ...savedState };
+            } else {
+                gameState = getFreshDefaultState();
+            }
+        }
+
+        // --- 交易所逻辑 ---
+        
+        function openListItemModal() {
+            const password = prompt("请输入授权密码以上架商品:");
+            if (password === "1234") {
+                document.getElementById('listItemModal').classList.remove('hidden');
+                document.getElementById('listItemModal').classList.add('flex');
+            } else if (password !== null) {
+                alert("授权密码错误！");
+            }
+        }
+
+        function closeListItemModal() {
+            document.getElementById('listItemModal').classList.add('hidden');
+            document.getElementById('listItemModal').classList.remove('flex');
+            document.getElementById('listItemForm').reset();
+        }
+        
+        function handleListItemSubmit(e) {
+            e.preventDefault();
+            
+            const itemName = document.getElementById('itemNameInput').value;
+            const itemPrice = parseInt(document.getElementById('itemPriceInput').value);
+            const itemUrl = document.getElementById('itemImageUrlInput').value.trim();
+            const itemFile = document.getElementById('itemImageFileInput').files[0];
+
+            if (isNaN(itemPrice) || itemPrice <= 0) {
+                alert("请输入有效的正数价格！");
+                return;
+            }
+            if (!itemUrl && !itemFile) {
+                alert("请提供商品图片URL或上传本地图片！");
+                return;
+            }
+
+            const processListing = (imageUrl) => {
+                const newListing = {
+                    listingId: Date.now(),
+                    sellerUsername: currentUser,
+                    sellerCharacterName: gameState.characterName || currentUser,
+                    name: itemName,
+                    price: itemPrice,
+                    image: imageUrl
+                };
+                
+                globalExchangeListings.push(newListing);
+                saveExchangeListings();
+                renderExchange();
+                closeListItemModal();
+                alert(`商品 "${itemName}" 已成功上架！`);
+            };
+
+            if (itemFile) {
+                const reader = new FileReader();
+                reader.onload = function(e) { processListing(e.target.result); };
+                reader.readAsDataURL(itemFile);
+            } else {
+                processListing(itemUrl);
+            }
+        }
+
+        function renderExchange() {
+            const container = document.getElementById('exchangeListings');
+            container.innerHTML = '';
+
+            if (globalExchangeListings.length === 0) {
+                container.innerHTML = '<p class="text-gray-400 text-center col-span-full">交易所目前空空如也，快来上架你的第一个商品吧！</p>';
+                return;
+            }
+
+            globalExchangeListings.forEach(listing => {
+                const isOwner = listing.sellerUsername === currentUser;
+                const card = document.createElement('div');
+                card.className = 'magic-card p-4 rounded-lg flex flex-col justify-between transition-all hover:shadow-lg hover:shadow-purple-500/30';
+                
+                card.innerHTML = `
+                    <div>
+                        <div class="w-full h-40 bg-gray-900 rounded-lg mb-3 flex items-center justify-center overflow-hidden">
+                            <img src="${listing.image}" alt="${listing.name}" class="w-full h-full object-cover">
+                        </div>
+                        <h4 class="text-white font-bold text-lg truncate" title="${listing.name}">${listing.name}</h4>
+                        <p class="text-xs text-purple-300 mb-3">由 ${listing.sellerCharacterName} 出售</p>
+                    </div>
+                    <div class="flex justify-between items-center mt-auto">
+                        <span class="text-yellow-400 font-bold text-xl">${listing.price} <i class="fas fa-coins text-sm"></i></span>
+                        ${isOwner 
+                            ? `<button onclick="deleteListing(${listing.listingId})" class="bg-red-600 hover:bg-red-700 text-white px-3 py-1 rounded text-xs" title="下架商品"><i class="fas fa-times mr-1"></i>下架</button>`
+                            : `<button onclick="purchaseListing(${listing.listingId})" class="bg-green-600 hover:bg-green-700 text-white px-3 py-1 rounded text-xs" title="购买商品"><i class="fas fa-shopping-cart mr-1"></i>购买</button>`
+                        }
+                    </div>
+                `;
+                container.appendChild(card);
+            });
+        }
+
+        function purchaseListing(listingId) {
+            const listingIndex = globalExchangeListings.findIndex(l => l.listingId === listingId);
+            if (listingIndex === -1) {
+                alert("此商品已被购买或下架。");
+                renderExchange();
+                return;
+            }
+            const listing = globalExchangeListings[listingIndex];
+            
+            if (listing.sellerUsername === currentUser) {
+                alert("你不能购买自己上架的商品！");
+                return;
+            }
+            
+            if (gameState.playerGold < listing.price) {
+                alert("你的魔法金币不足！");
+                return;
+            }
+
+            if (gameState.inventory.length >= 30) {
+                alert('你的装备仓库已满，无法购买！');
+                return;
+            }
+
+            if (confirm(`确定要花费 ${listing.price} 金币购买 "${listing.name}" 吗？`)) {
+                // 1. Buyer loses gold
+                gameState.playerGold -= listing.price;
+
+                // 2. Buyer gains item
+                const purchasedItem = {
+                    id: listing.listingId,
+                    name: listing.name,
+                    image: listing.image,
+                    price: listing.price, 
+                };
+                gameState.inventory.push(purchasedItem);
+                
+                // 3. Seller gains gold
+                const accounts = getAccounts();
+                const sellerAccount = accounts[listing.sellerUsername];
+                if (sellerAccount) {
+                    sellerAccount.gameState.playerGold += listing.price;
+                    saveAccounts(accounts);
+                } else {
+                    console.error("Could not find seller account to credit gold.");
+                }
+                
+                // 4. Remove listing from exchange
+                globalExchangeListings.splice(listingIndex, 1);
+                
+                // 5. Save and update UI
+                saveExchangeListings();
+                saveGameAndStay();
+                updateUI();
+                renderInventory();
+                renderExchange();
+                
+                alert("购买成功！");
+            }
+        }
+
+        function deleteListing(listingId) {
+            const password = prompt("请输入密码以确认下架商品:");
+            if (password === "1234") {
+                const listingIndex = globalExchangeListings.findIndex(l => l.listingId === listingId);
+                if (listingIndex === -1) return;
+
+                if (confirm("确定要下架这个商品吗？")) {
+                    globalExchangeListings.splice(listingIndex, 1);
+                    saveExchangeListings();
+                    renderExchange();
+                    alert("商品已下架。");
+                }
+            } else if (password !== null) {
+                alert("密码错误！");
+            }
+        }
+
+        // --- 角斗场逻辑 ---
+        function renderArena() {
+            document.getElementById('arenaPlayerName').textContent = gameState.characterName || '未命名角色';
+            const playerAvatarDiv = document.getElementById('arenaPlayerAvatar');
+            if (gameState.characterAvatar) {
+                playerAvatarDiv.innerHTML = '';
+                playerAvatarDiv.style.backgroundImage = `url('${gameState.characterAvatar}')`;
+                playerAvatarDiv.classList.remove('character-avatar-default-bg');
+            } else {
+                playerAvatarDiv.style.backgroundImage = '';
+                playerAvatarDiv.innerHTML = '<i class="fas fa-user fa-6x text-white"></i>';
+                playerAvatarDiv.classList.add('character-avatar-default-bg');
+            }
+            document.getElementById('arenaPlayerAttack').textContent = gameState.equippedItems.reduce((sum, item) => sum + item.attack, 0);
+            document.getElementById('arenaPlayerDefense').textContent = gameState.equippedItems.reduce((sum, item) => sum + item.defense, 0);
+            
+            renderBattleHistory();
+        }
+
+        function startFight() {
+            const fightButton = document.getElementById('fightButton');
+            const betInput = document.getElementById('customBetInput');
+            let betAmount = parseInt(betInput.value);
+
+            // 验证和设置赌注
+            if (!betInput.value || isNaN(betAmount)) {
+                betAmount = 100;
+            } else {
+                if (betAmount < 300) {
+                    alert("自定义赌注必须大于或等于300！");
+                    return;
+                }
+                if (betAmount % 100 !== 0) {
+                    alert("自定义赌注必须是100的倍数！");
+                    return;
+                }
+            }
+            
+            if (gameState.playerGold < betAmount) {
+                alert(`魔法金币不足${betAmount}，无法战斗！`);
+                return;
+            }
+            
+            if (!confirm(`战斗需要花费 ${betAmount} 魔法金币，确定要开始吗？`)) {
+                return;
+            }
+
+            gameState.playerGold -= betAmount;
+            updateUI();
+            saveGameAndStay();
+
+            const accounts = getAccounts();
+            const opponents = Object.keys(accounts).filter(username => username !== currentUser);
+
+            if (opponents.length === 0) {
+                alert("没有其他玩家可以挑战！");
+                gameState.playerGold += betAmount;
+                updateUI();
+                saveGameAndStay();
+                return;
+            }
+
+            fightButton.disabled = true;
+            fightButton.textContent = "匹配中...";
+
+            const opponentNameEl = document.getElementById('arenaOpponentName');
+            const opponentAvatarEl = document.getElementById('arenaOpponentAvatar');
+
+            rollInterval = setInterval(() => {
+                const randomOpponentUsername = opponents[Math.floor(Math.random() * opponents.length)];
+                const randomOpponentState = accounts[randomOpponentUsername].gameState;
+                opponentNameEl.textContent = randomOpponentState.characterName || randomOpponentUsername;
+                if (randomOpponentState.characterAvatar) {
+                    opponentAvatarEl.innerHTML = '';
+                    opponentAvatarEl.style.backgroundImage = `url('${randomOpponentState.characterAvatar}')`;
+                    opponentAvatarEl.classList.remove('character-avatar-default-bg');
+                } else {
+                    opponentAvatarEl.style.backgroundImage = '';
+                    opponentAvatarEl.innerHTML = '<i class="fas fa-question fa-6x text-white"></i>';
+                    opponentAvatarEl.classList.add('character-avatar-default-bg');
+                }
+            }, 100);
+
+            setTimeout(() => {
+                clearInterval(rollInterval);
+                const finalOpponentUsername = opponents[Math.floor(Math.random() * opponents.length)];
+                const finalOpponentState = accounts[finalOpponentUsername].gameState;
+                
+                const opponentStats = {
+                    name: finalOpponentState.characterName || finalOpponentUsername,
+                    avatar: finalOpponentState.characterAvatar,
+                    attack: finalOpponentState.equippedItems.reduce((sum, item) => sum + item.attack, 0),
+                    defense: finalOpponentState.equippedItems.reduce((sum, item) => sum + item.defense, 0),
+                };
+
+                opponentNameEl.textContent = opponentStats.name;
+                if (opponentStats.avatar) {
+                    opponentAvatarEl.innerHTML = '';
+                    opponentAvatarEl.style.backgroundImage = `url('${opponentStats.avatar}')`;
+                    opponentAvatarEl.classList.remove('character-avatar-default-bg');
+                } else {
+                    opponentAvatarEl.style.backgroundImage = '';
+                    opponentAvatarEl.innerHTML = '<i class="fas fa-user-slash fa-6x text-white"></i>';
+                    opponentAvatarEl.classList.add('character-avatar-default-bg');
+                }
+                document.getElementById('arenaOpponentAttack').textContent = opponentStats.attack;
+                document.getElementById('arenaOpponentDefense').textContent = opponentStats.defense;
+
+                setTimeout(() => doBattle(opponentStats, betAmount), 1000);
+
+            }, 5000);
+        }
+
+        function doBattle(opponentStats, betAmount) {
+            const playerAttack = gameState.equippedItems.reduce((sum, item) => sum + item.attack, 0);
+            const playerDefense = gameState.equippedItems.reduce((sum, item) => sum + item.defense, 0);
+            const playerPower = playerAttack + playerDefense;
+            const opponentPower = opponentStats.attack + opponentStats.defense;
+
+            const playerName = gameState.characterName || currentUser;
+            const opponentName = opponentStats.name;
+
+            let winner, loser, rewardAmount = 0;
+            if (playerPower >= opponentPower) {
+                rewardAmount = betAmount * 2;
+                winner = { name: playerName, avatar: gameState.characterAvatar, isPlayer: true };
+                loser = { name: opponentName };
+                gameState.playerGold += rewardAmount;
+            } else {
+                winner = { name: opponentName, avatar: opponentStats.avatar, isPlayer: false };
+                loser = { name: playerName };
+            }
+
+            const history = JSON.parse(localStorage.getItem(BATTLE_HISTORY_KEY) || '[]');
+            history.push({ winner: winner.name, loser: loser.name, timestamp: Date.now() });
+            localStorage.setItem(BATTLE_HISTORY_KEY, JSON.stringify(history));
+
+            saveGameAndStay();
+            showBattleResult(winner, rewardAmount);
+        }
+
+        function showBattleResult(winner, rewardAmount) {
+            const modal = document.getElementById('battleResultModal');
+            const rewardText = document.getElementById('battleRewardText');
+
+            document.getElementById('battleResultText').textContent = winner.isPlayer ? "胜利!" : "失败!";
+            document.getElementById('battleResultText').className = `text-6xl font-bold mb-4 ${winner.isPlayer ? 'text-yellow-300' : 'text-red-500'}`;
+            document.getElementById('battleResultWinnerName').textContent = winner.name;
+            const winnerAvatarDiv = document.getElementById('battleResultWinnerAvatar');
+            if (winner.avatar) {
+                winnerAvatarDiv.innerHTML = '';
+                winnerAvatarDiv.style.backgroundImage = `url('${winner.avatar}')`;
+                winnerAvatarDiv.classList.remove('character-avatar-default-bg');
+            } else {
+                winnerAvatarDiv.style.backgroundImage = '';
+                winnerAvatarDiv.innerHTML = `<i class="fas ${winner.isPlayer ? 'fa-user-astronaut' : 'fa-user-slash'} fa-6x text-white"></i>`;
+                winnerAvatarDiv.classList.add('character-avatar-default-bg');
+            }
+
+            if(winner.isPlayer && rewardAmount > 0) {
+                rewardText.textContent = `+${rewardAmount} 魔法金币`;
+                createConfetti();
+            } else {
+                rewardText.textContent = "";
+            }
+
+            modal.classList.remove('hidden');
+            modal.classList.add('flex');
+        }
+
+        function closeBattleResultModal() {
+            const modal = document.getElementById('battleResultModal');
+            modal.classList.add('hidden');
+            modal.classList.remove('flex');
+            
+            document.getElementById('arenaOpponentName').textContent = "???";
+            const opponentAvatarEl = document.getElementById('arenaOpponentAvatar');
+            opponentAvatarEl.style.backgroundImage = '';
+            opponentAvatarEl.innerHTML = '<i class="fas fa-question fa-6x text-white"></i>';
+            opponentAvatarEl.classList.add('character-avatar-default-bg');
+            document.getElementById('arenaOpponentAttack').textContent = "?";
+            document.getElementById('arenaOpponentDefense').textContent = "?";
+            
+            const fightButton = document.getElementById('fightButton');
+            fightButton.disabled = false;
+            fightButton.textContent = "战斗吧！";
+
+            document.getElementById('confettiContainer').innerHTML = '';
+            renderBattleHistory();
+            updateUI();
+        }
+
+        function renderBattleHistory() {
+            const history = JSON.parse(localStorage.getItem(BATTLE_HISTORY_KEY) || '[]');
+            const winLossContainer = document.getElementById('winLossRanking');
+            const recentContainer = document.getElementById('recentBattles');
+            winLossContainer.innerHTML = '';
+            recentContainer.innerHTML = '';
+            
+            if (history.length === 0) {
+                winLossContainer.innerHTML = '<p class="text-gray-500">暂无排名数据</p>';
+                recentContainer.innerHTML = '<p class="text-gray-500">暂无对战记录</p>';
+                return;
+            }
+
+            const stats = {};
+            history.forEach(battle => {
+                stats[battle.winner] = stats[battle.winner] || { wins: 0, losses: 0 };
+                stats[battle.loser] = stats[battle.loser] || { wins: 0, losses: 0 };
+                stats[battle.winner].wins++;
+                stats[battle.loser].losses++;
+            });
+
+            const sortedPlayers = Object.keys(stats).sort((a, b) => stats[b].wins - stats[a].wins);
+            
+            sortedPlayers.forEach((player, index) => {
+                const rankDiv = document.createElement('div');
+                rankDiv.className = 'flex justify-between items-center text-gray-300';
+                rankDiv.innerHTML = `
+                    <div>
+                        <span class="font-bold text-lg mr-2">${index + 1}.</span>
+                        <span class="text-purple-300">${player}</span>
+                    </div>
+                    <div>
+                        <span class="text-green-400">${stats[player].wins}胜</span> / 
+                        <span class="text-red-400">${stats[player].losses}负</span>
+                    </div>
+                `;
+                winLossContainer.appendChild(rankDiv);
+            });
+
+
+            history.slice(-5).reverse().forEach(battle => {
+                const battleDiv = document.createElement('div');
+                battleDiv.className = 'text-gray-400 text-sm';
+                battleDiv.innerHTML = `
+                    <span class="font-bold text-green-400">${battle.winner}</span> 
+                    击败了 
+                    <span class="font-bold text-red-400">${battle.loser}</span>`;
+                recentContainer.appendChild(battleDiv);
+            });
+        }
+
+        function createConfetti() {
+            const container = document.getElementById('confettiContainer');
+            container.innerHTML = '';
+            const colors = ['#f00', '#0f0', '#00f', '#ff0', '#0ff', '#f0f'];
+            for (let i = 0; i < 100; i++) {
+                const confetti = document.createElement('div');
+                confetti.className = 'confetti';
+                confetti.style.left = Math.random() * 100 + 'vw';
+                confetti.style.backgroundColor = colors[Math.floor(Math.random() * colors.length)];
+                confetti.style.animationDelay = Math.random() * 3 + 's';
+                container.appendChild(confetti);
+            }
+        }
+    </script>
+</body>
+</html>
